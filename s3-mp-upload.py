@@ -60,7 +60,7 @@ def do_part_upload(args):
     """
     # Multiprocessing args lameness
     (
-        bucket_name, mpu_id, fname, i, start, size, secure, max_tries,
+        bucket_name, mpu_id, mpu_key_name, fname, i, start, size, secure, max_tries,
         current_tries) = args
     logger.debug("do_part_upload got args: %s" % (args,))
 
@@ -68,13 +68,9 @@ def do_part_upload(args):
     s3 = boto.connect_s3(calling_format=OrdinaryCallingFormat())
     s3.is_secure = secure
     bucket = s3.lookup(bucket_name)
-    mpu = None
-    for mp in bucket.list_multipart_uploads():
-        if mp.id == mpu_id:
-            mpu = mp
-            break
-    if mpu is None:
-        raise Exception("Could not find MultiPartUpload %s" % mpu_id)
+    mpu = boto.s3.multipart.MultiPartUpload(bucket)
+    mpu.id = mpu_id
+    mpu.key_name = mpu_key_name
 
     # Read the chunk from the file
     fp = open(fname, 'rb')
@@ -162,12 +158,12 @@ def main(
             part_start = part_size * i
             if i == (num_parts - 1) and fold_last is True:
                 yield (
-                    bucket.name, mpu.id, src.name, i, part_start,
+                    bucket.name, mpu.id, mpu.key_name, src.name, i, part_start,
                     part_size * 2, secure, max_tries, 0)
                 break
             else:
                 yield (
-                    bucket.name, mpu.id, src.name, i, part_start, part_size,
+                    bucket.name, mpu.id, mpu.key_name, src.name, i, part_start, part_size,
                     secure, max_tries, 0)
 
     # If the last part is less than 5M, just fold it into the previous part
@@ -197,6 +193,7 @@ def main(
         logger.error("Encountered an error, canceling upload")
         logger.error(err)
         mpu.cancel_upload()
+        raise
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
